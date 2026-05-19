@@ -1,0 +1,233 @@
+name: LLM Evaluation Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "pipeline/**"
+      - "eval/**"
+      - "data/**"
+      - "requirements.txt"
+  pull_request:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "eval/**"
+      - "data/**"
+      - "requirements.txt"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  LLM_PROVIDER: mock
+  LLM_MODEL: mock-model
+  RAG_BACKEND: mock
+
+jobs:
+  # ── Job 1: Validate dataset schema ────────────────────────────────────────
+  validate-dataset:
+    name: "📋 Validate Golden Dataset"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install validation deps
+        run: pip install jsonschema
+
+      - name: Validate dataset schema
+        run: python scripts/validate_dataset.py
+
+  # ── Job 2: Unit tests ──────────────────────────────────────────────────────
+  unit-tests:
+    name: "🧪 Unit Tests"
+    runs-on: ubuntu-latest
+    needs: validate-dataset
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Create virtual environment & install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          source .venv/bin/activate
+          pytest tests/ -v --tb=short --cov=eval --cov=pipeline \
+            --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+  # ── Job 3: Evaluation shards (parallelized) ───────────────────────────────
+  eval-suite:
+    name: "⚙️ Eval Shard ${{ matrix.shard }}/${{ matrix.total }}"
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    strategy:
+      matrix:
+        shard: [0, 1, 2, 3]
+        total: [4]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Create virtual environment & install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download NLI model (cached)
+        run: |
+          source .venv/bin/activate
+          python -c "
+          from sentence_transformers import CrossEncoder, SentenceTransformer
+          CrossEncoder('cross-encoder/nli-deberta-v3-small')
+          SentenceTransformer('all-MiniLM-L6-v2')
+          print('Models ready')
+          "
+
+      - name: Run evaluation shard ${{ matrix.shard }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          source .venv/bin/activate
+          python -m eval.runner \
+            --dataset data/golden_dataset.json \
+            --shard ${{ matrix.shard }} \
+            --total-shards ${{ matrix.total }} \
+            --output-dir results
+
+      - name: Upload shard results
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-results-${{ matrix.shard }}
+          path: results/*.json
+          retention-days: 30
+
+  # ── Job 4: Merge shards + Gate check ──────────────────────────────────────
+  gate-check:
+    name: "🚦 Gate Check & Merge Decision"
+    runs-on: ubuntu-latest
+    needs: eval-suite
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download all shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: shard-results-*
+          path: results
+          merge-multiple: true
+
+      - name: Merge shards & run gate check
+        id: gate
+        run: |
+          source .venv/bin/activate
+          python scripts/merge_and_gate.py --results-dir results --output gate_result.json
+          echo "gate_passed=$(python -c "import json; d=json.load(open('gate_result.json')); print(str(d['passed']).lower())")" >> $GITHUB_OUTPUT
+
+      - name: Post PR comment with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('gate_result.json', 'utf8'));
+            const m = result.metrics;
+            const icon = result.passed ? '✅' : '🚨';
+            const status = result.passed ? 'PASSED — merge allowed' : 'FAILED — merge BLOCKED';
+
+            let body = `## ${icon} LLM Eval Gate: ${status}\n\n`;
+            body += `| Metric | Value | Threshold | Status |\n`;
+            body += `|--------|-------|-----------|--------|\n`;
+            body += `| Hallucination Rate | ${(m.hallucination_rate*100).toFixed(1)}% | ≤5% | ${m.hallucination_rate<=0.05?'✅':'❌'} |\n`;
+            body += `| p95 Latency | ${m.p95_latency_ms.toFixed(0)}ms | ≤5000ms | ${m.p95_latency_ms<=5000?'✅':'❌'} |\n`;
+            body += `| Answer Relevancy | ${m.mean_relevancy.toFixed(3)} | ≥0.70 | ${m.mean_relevancy>=0.70?'✅':'⚠️'} |\n`;
+            body += `| Faithfulness | ${m.mean_faithfulness.toFixed(3)} | ≥0.75 | ${m.mean_faithfulness>=0.75?'✅':'⚠️'} |\n`;
+            body += `| Cost/Query | $${m.mean_cost_per_query.toFixed(5)} | ≤$0.01 | ${m.mean_cost_per_query<=0.01?'✅':'⚠️'} |\n`;
+
+            if (result.violations && result.violations.length > 0) {
+              body += `\n### 🚨 Blocking Violations\n`;
+              result.violations.forEach(v => { body += `- **${v.metric}**: ${v.message}\n`; });
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail if gate blocked
+        if: steps.gate.outputs.gate_passed == 'false'
+        run: |
+          echo "🚨 Gate check FAILED — blocking merge"
+          exit 1
+
+  # ── Job 5: Update dashboard data ─────────────────────────────────────────
+  update-dashboard:
+    name: "📊 Update Dashboard Data"
+    runs-on: ubuntu-latest
+    needs: gate-check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: shard-results-*
+          path: results
+          merge-multiple: true
+
+      - name: Commit results to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/
+          git diff --staged --quiet || git commit -m "ci: update eval results [skip ci]"
+          git push

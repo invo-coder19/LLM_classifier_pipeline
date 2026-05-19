@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Golden Dataset Schema",
+  "type": "object",
+  "required": ["version", "items"],
+  "properties": {
+    "version": { "type": "string" },
+    "items": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["id", "question", "expected_answer", "category", "difficulty"],
+        "properties": {
+          "id":              { "type": "string", "pattern": "^q\\d{3}$" },
+          "question":        { "type": "string", "minLength": 10 },
+          "expected_answer": { "type": "string", "minLength": 5 },
+          "category":        { "type": "string", "enum": ["factual", "reasoning", "multi-hop", "adversarial", "edge-case", "out-of-scope"] },
+          "difficulty":      { "type": "string", "enum": ["easy", "medium", "hard"] },
+          "source_docs":     { "type": "array", "items": { "type": "string" } },
+          "acceptable_keywords": { "type": "array", "items": { "type": "string" } },
+          "notes":           { "type": "string" }
+        }
+      }
+    }
+  }
+}
