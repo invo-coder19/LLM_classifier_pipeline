@@ -4,7 +4,6 @@ Unified LLM client supporting OpenAI, Anthropic, Ollama, and Mock backends.
 from __future__ import annotations
 
 import time
-import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
@@ -132,10 +131,12 @@ class MockLLMClient(BaseLLMClient):
     ]
 
     def complete(self, system_prompt: str, user_message: str) -> LLMResponse:
-        # Stable seed per question for reproducibility
-        idx = hash(user_message) % (len(self.CANNED) - 1)  # avoids hallucination entry normally
+        # Stable hash-based seed per question for reproducibility across shards
+        seed = abs(hash(user_message))
+        idx = seed % (len(self.CANNED) - 1)  # avoids the deliberate hallucination entry
         text = self.CANNED[idx]
-        latency_ms = random.uniform(80, 400)
+        # Deterministic latency in [80, 400] ms range — avoids random flakiness in tests
+        latency_ms = 80.0 + (seed % 321)
         time.sleep(latency_ms / 1000)
         tokens = len(text.split())
         return LLMResponse(

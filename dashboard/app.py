@@ -105,23 +105,6 @@ def to_df(runs: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("timestamp")
 
 
-def sparkline(fig_data: dict, color: str) -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=fig_data["x"], y=fig_data["y"],
-        mode="lines+markers",
-        line=dict(color=color, width=2),
-        marker=dict(size=5),
-        fill="tozeroy",
-        fillcolor=f"rgba{tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (0.1,)}",
-    ))
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0), height=80,
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(visible=False), yaxis=dict(visible=False),
-        showlegend=False,
-    )
-    return fig
 
 
 # ── Layout ────────────────────────────────────────────────────────────────────

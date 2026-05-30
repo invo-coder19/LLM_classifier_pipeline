@@ -77,9 +77,16 @@ def merge_and_gate(results_dir: str, output_path: str) -> bool:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--results-dir", default="results")
-    parser.add_argument("--output", default="gate_result.json")
+    parser = argparse.ArgumentParser(description="Merge shard results and run gate check")
+    parser.add_argument("--results-dir", default="results",
+                        help="Directory containing shard result JSON files")
+    parser.add_argument("--output", default="gate_result.json",
+                        help="Output path for the merged gate result JSON")
+    parser.add_argument("--fail-on-gate", action="store_true",
+                        help="Exit 1 if gate fails (useful for local runs; in CI the workflow handles this)")
     args = parser.parse_args()
     passed = merge_and_gate(args.results_dir, args.output)
-    sys.exit(0 if passed else 1)
+    # In CI: always exit 0 here — the workflow reads gate_passed from the JSON output
+    # and handles the blocking failure in a separate step.
+    # With --fail-on-gate: exit 1 for local developer convenience.
+    sys.exit(0 if (passed or not args.fail_on_gate) else 1)

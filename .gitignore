@@ -1,13 +1,26 @@
-results/
-.venv/
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.env
 .coverage
 coverage.xml
-*.egg-info/
-dist/
-build/
+
+# Environment
+.venv/
+.env
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Eval results — exclude runtime outputs but keep the results/ folder
+results/*.json
+!results/.gitkeep
+
+# HuggingFace model cache (if accidentally placed in workspace)
+.cache/

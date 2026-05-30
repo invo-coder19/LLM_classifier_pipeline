@@ -30,7 +30,8 @@ from eval.metrics.latency import compute_latency_stats
 from eval.metrics.cost import estimate_cost, compute_cost_summary
 from eval.gates import run_gates
 
-console = Console(highlight=False, force_terminal=False)
+# force_terminal=None lets Rich auto-detect TTY (correct for both CI and local)
+console = Console(highlight=False)
 
 SYSTEM_PROMPT = """You are a helpful assistant. Answer the user's question based ONLY on the 
 provided context documents. If the answer is not in the context, say 'I don't know based on 
@@ -91,10 +92,10 @@ def run_evaluation(
                 p_tokens = response.prompt_tokens
                 c_tokens = response.completion_tokens
                 model = response.model
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 console.print(f"[red]Error on {qid}: {e}[/]")
                 answer = ""
-                latency = cfg.timeout_seconds * 1000
+                latency = float(cfg.timeout_seconds * 1000)
                 p_tokens = c_tokens = 0
                 model = cfg.model
 

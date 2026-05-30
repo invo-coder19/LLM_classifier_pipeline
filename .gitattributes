@@ -1,0 +1,25 @@
+# Normalize line endings to LF in the repo, checkout as-is on all platforms
+* text=auto eol=lf
+
+# Force LF for shell scripts and YAML
+*.yml text eol=lf
+*.yaml text eol=lf
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Force LF for Python
+*.py text eol=lf
+
+# Force LF for config/data files
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+.env* text eol=lf
+.gitignore text eol=lf
+
+# Binary files — no line ending conversion
+*.png binary
+*.jpg binary
+*.ico binary
