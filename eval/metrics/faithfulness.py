@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from typing import List
 import re
 
+# Module-level singleton — lazy-loaded on first call.
+# To mock in tests, patch the exact path: 'eval.metrics.faithfulness._model'
+# (each metric module has its own independent singleton — patch them separately).
 _model = None
 
 

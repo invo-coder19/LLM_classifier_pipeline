@@ -35,7 +35,10 @@ def merge_and_gate(results_dir: str, output_path: str) -> bool:
             all_rel.append(q.get("relevancy_score", 0))
             all_faith.append(q.get("faithfulness_score", 0))
             all_costs.append(CostResult(
-                q.get("cost_usd", 0), 0, 0, data.get("model", "mock-model")
+                cost_usd=q.get("cost_usd", 0.0),
+                prompt_tokens=0,
+                completion_tokens=0,
+                model=data.get("model", "mock-model"),
             ))
 
     total = len(all_queries)

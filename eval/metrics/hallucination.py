@@ -12,6 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+# Module-level singleton — lazy-loaded on first call.
+# To mock in tests, patch the exact path: 'eval.metrics.hallucination._model'
+# (each metric module has its own independent singleton — patch them separately).
 _model = None  # lazy-loaded singleton
 
 

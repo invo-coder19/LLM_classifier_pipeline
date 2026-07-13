@@ -21,7 +21,8 @@ os.environ.setdefault("OPENAI_API_KEY", "")
 os.environ.setdefault("ANTHROPIC_API_KEY", "")
 
 # Ensure project root is on sys.path for CI environments
-_ROOT = Path(__file__).parent
+# NOTE: __file__ is tests/conftest.py, so .parent.parent gives the project root.
+_ROOT = Path(__file__).parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 

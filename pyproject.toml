@@ -27,4 +27,4 @@ omit = ["tests/*", "dashboard/*", "scripts/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 50
+fail_under = 70

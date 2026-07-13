@@ -96,7 +96,10 @@ class OllamaClient(BaseLLMClient):
     def __init__(self, config: PipelineConfig):
         super().__init__(config)
         import httpx
-        self._http = httpx.Client(base_url=config.ollama_base_url, timeout=config.timeout_seconds)
+        self._http = httpx.Client(
+            base_url=config.ollama_base_url,
+            timeout=httpx.Timeout(timeout=config.timeout_seconds, connect=5.0),
+        )
 
     def complete(self, system_prompt: str, user_message: str) -> LLMResponse:
         start = time.perf_counter()
@@ -135,9 +138,9 @@ class MockLLMClient(BaseLLMClient):
         seed = abs(hash(user_message))
         idx = seed % (len(self.CANNED) - 1)  # avoids the deliberate hallucination entry
         text = self.CANNED[idx]
-        # Deterministic latency in [80, 400] ms range — avoids random flakiness in tests
+        # Deterministic latency in [80, 400] ms range recorded but NOT slept —
+        # sleeping wastes real CI minutes without improving metric accuracy.
         latency_ms = 80.0 + (seed % 321)
-        time.sleep(latency_ms / 1000)
         tokens = len(text.split())
         return LLMResponse(
             text=text,
