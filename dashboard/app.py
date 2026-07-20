@@ -122,7 +122,7 @@ with st.sidebar:
     selected_model = st.selectbox("Model", models)
     providers = ["All"] + sorted(df["provider"].unique().tolist())
     selected_provider = st.selectbox("Provider", providers)
-    date_range = st.date_input("Date range", [df["timestamp"].min(), df["timestamp"].max()])
+    date_range = st.date_input("Date range", [df["timestamp"].min().date(), df["timestamp"].max().date()])
     st.divider()
     st.markdown("### 🎯 Thresholds")
     st.metric("Max Hallucination", "5%")
@@ -135,6 +135,14 @@ if selected_model != "All":
     filtered = filtered[filtered["model"] == selected_model]
 if selected_provider != "All":
     filtered = filtered[filtered["provider"] == selected_provider]
+# Apply date range filter (date_range may be a 1- or 2-element tuple)
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    start_dt = pd.Timestamp(date_range[0])
+    end_dt = pd.Timestamp(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    filtered = filtered[(filtered["timestamp"] >= start_dt) & (filtered["timestamp"] <= end_dt)]
+elif isinstance(date_range, (list, tuple)) and len(date_range) == 1:
+    start_dt = pd.Timestamp(date_range[0])
+    filtered = filtered[filtered["timestamp"].dt.date == date_range[0]]
 
 # ── KPI Cards ─────────────────────────────────────────────────────────────────
 if not filtered.empty:
